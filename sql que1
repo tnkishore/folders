@@ -1547,6 +1547,203 @@ mi.campaign_name,
 
  
 
+------------------------------------------------------------------------------------------------------------------
+select labels,count(distinct cust_group) from model.final_model_1 group by 1;-- should be 32,568,926
+--73,60,801
+delete from model.final_model_1 where labels is null;
+
+vacuum model.final_model_1;
+vacuum analysis.ser_rcrepm_tb_4yr;
+
+--2,95,69,196
+create table model.final_model_2
+as select distinct a.new_camp_id,a.vin,a.cust_group,a.labels,a.prog_start_dt_new, (date(a.prog_start_dt_new) - interval '90' day) as bef_3,
+(date(a.prog_start_dt_new) - interval '180' day) as bef_6, (date(a.prog_start_dt_new) - interval '270' day) as bef_9,
+(date(a.prog_start_dt_new) - interval '365' day) as bef_12, b.repm_ro_dtime,b.repm_work_type,b.repm_ro_no,b.repm_dlr_no,(b.repm_bill_total_labr_amt+b.repm_bill_total_othr_amt+b.repm_bill_total_part_amt)tot_ro_amt
+from model.final_model_1 a left outer join analysis.ser_rcrepm_tb_4yr b on a.vin=b.repm_vin where b.repm_work_type <> 'AR' ;
+--4,04,42,528
+select count(*) from model.final_model_2 as fm;
+vacuum model.final_model_2;
+
+vacuum model.final_model_1;
+vacuum analysis.ser_rcrepm_tb_4yr;
+create table model.final_model_2_v2 
+as select distinct a.new_camp_id,a.vin,a.cust_group,a.labels,a.prog_start_dt_new, (date(a.prog_start_dt_new) - interval '90' day) as bef_3,
+(date(a.prog_start_dt_new) - interval '180' day) as bef_6, (date(a.prog_start_dt_new) - interval '270' day) as bef_9,
+(date(a.prog_start_dt_new) - interval '365' day) as bef_12, b.repm_ro_dtime,b.repm_work_type,b.repm_ro_no,b.repm_dlr_no,b.repm_milg,(b.repm_bill_total_labr_amt+b.repm_bill_total_othr_amt+b.repm_bill_total_part_amt)tot_ro_amt
+from model.final_model_1 a left outer join analysis.ser_rcrepm_tb_4yr b on a.vin=b.repm_vin where b.repm_work_type <> 'AR' ;
+
+
+--3,63,788
+create table model.final_model_3 as
+select a.cust_group,sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then 1 else 0 end) sum_bef_3, 
+sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then 1 else 0 end) sum_bef_6,
+sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then 1 else 0 end) sum_bef_9,
+sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then 1 else 0 end) sum_bef_12 from model.final_model_2 a group by 1;
+
+select count(*) from model.dist_camp as dc;
+create table model.dist_camp as
+select a.cust_group,count(distinct new_camp_id)d_camp from model.final_model_2 a group by 1;
+
+create table model.final_model_3_v2 as 
+select a.cust_group,
+round(a.sum_bef_3/b.d_camp)avg_3, round(a.sum_bef_6/b.d_camp)avg_6,
+round(a.sum_bef_9/b.d_camp)avg_9,round(a.sum_bef_12/b.d_camp)avg_12 from model.final_model_3 a inner join model.dist_camp b on a.cust_group=b.cust_group;
+
+--3,41,700
+create table model.final_model_4 as
+select a.cust_group,sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then 1 else 0 end) fs_bef_3, 
+sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then 1 else 0 end) fs_bef_6,
+sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then 1 else 0 end) fs_bef_9,
+sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then 1 else 0 end) fs_bef_12 from model.final_model_2 a where a.repm_work_type='FS' group by 1 ;
+
+create table model.final_model_4_v2 as 
+select a.cust_group,
+round(a.fs_bef_3/b.d_camp)fs_avg_3, round(a.fs_bef_6/b.d_camp)fs_avg_6,
+round(a.fs_bef_9/b.d_camp)fs_avg_9,round(a.fs_bef_12/b.d_camp)fs_avg_12 from model.final_model_4 a inner join model.dist_camp b on a.cust_group=b.cust_group;
+
+--2,04,924
+create table model.final_model_5 as
+select a.cust_group,sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then 1 else 0 end) ps_bef_3, 
+sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then 1 else 0 end) ps_bef_6,
+sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then 1 else 0 end) ps_bef_9,
+sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then 1 else 0 end) ps_bef_12 from model.final_model_2 a where a.repm_work_type='PS' group by 1 ;
+
+create table model.final_model_5_v2 as 
+select a.cust_group,
+round(a.ps_bef_3/b.d_camp)ps_avg_3, round(a.ps_bef_6/b.d_camp)ps_avg_6,
+round(a.ps_bef_9/b.d_camp)ps_avg_9,round(a.ps_bef_12/b.d_camp)ps_avg_12 from model.final_model_5 a inner join model.dist_camp b on a.cust_group=b.cust_group;
+
+--2,55,024
+create table model.final_model_6 as
+select a.cust_group,sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then 1 else 0 end) rr_bef_3, 
+sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then 1 else 0 end) rr_bef_6,
+sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then 1 else 0 end) rr_bef_9,
+sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then 1 else 0 end) rr_bef_12 from model.final_model_2 a where a.repm_work_type='RR' group by 1 ;
+
+create table model.final_model_6_v2 as 
+select a.cust_group,
+round(a.rr_bef_3/b.d_camp)rr_avg_3, round(a.rr_bef_6/b.d_camp)rr_avg_6,
+round(a.rr_bef_9/b.d_camp)rr_avg_9,round(a.rr_bef_12/b.d_camp)rr_avg_12 from model.final_model_6 a inner join model.dist_camp b on a.cust_group=b.cust_group;
+
+--2,32,648
+create table model.final_model_7 as
+select a.cust_group,sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then 1 else 0 end) ot_bef_3, 
+sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then 1 else 0 end) ot_bef_6,
+sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then 1 else 0 end) ot_bef_9,
+sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then 1 else 0 end) ot_bef_12 from model.final_model_2 a where a.repm_work_type not in ('RR', 'PS', 'FS') group by 1 ;
+
+create table model.final_model_7_v2 as 
+select a.cust_group,
+round(a.ot_bef_3/b.d_camp)ot_avg_3, round(a.ot_bef_6/b.d_camp)ot_avg_6,
+round(a.ot_bef_9/b.d_camp)ot_avg_9,round(a.ot_bef_12/b.d_camp)ot_avg_12 from model.final_model_7 a inner join model.dist_camp b on a.cust_group=b.cust_group;
+
+create table model.final_model_8 as
+select a.cust_group,sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then tot_ro_amt else 0 end) sum_ro_bef_3, 
+sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then tot_ro_amt else 0 end) sum_ro_bef_6,
+sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then tot_ro_amt else 0 end) sum_ro_bef_9,
+sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then tot_ro_amt else 0 end) sum_ro_bef_12 from model.final_model_2 a group by 1;
+
+create table model.final_model_8_v2 as 
+select a.cust_group,
+round(a.sum_ro_bef_3/b.d_camp)ro_avg_3, round(a.sum_ro_bef_6/b.d_camp)ro_avg_6,
+round(a.sum_ro_bef_9/b.d_camp)ro_avg_9,round(a.sum_ro_bef_12/b.d_camp)ro_avg_12 from model.final_model_8 a inner join model.dist_camp b on a.cust_group=b.cust_group;
+
+--2,11,84,644
+create table model.final_model_9 as
+select b.repm_vin,b.repm_ro_dtime,b.repm_work_type,b.repm_ro_no,b.repm_dlr_no,(b.repm_bill_total_labr_amt+b.repm_bill_total_othr_amt+b.repm_bill_total_part_amt)tot_ro_amt from analysis.ser_rcrepm_tb_4yr b where repm_work_type <> 'AR';
+
+--3,14,700
+create table model.final_model_10 as
+select a.cust_group,sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then tot_ro_amt else 0 end) fs_ro_bef_3, 
+sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then tot_ro_amt else 0 end) fs_ro_bef_6,
+sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then tot_ro_amt else 0 end) fs_ro_bef_9,
+sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then tot_ro_amt else 0 end) fs_ro_bef_12 from model.final_model_2 a where a.repm_work_type='FS' group by 1;
+
+create table model.final_model_10_v2 as 
+select a.cust_group,
+round(a.fs_ro_bef_3/b.d_camp)fs_ro_avg_3, round(a.fs_ro_bef_6/b.d_camp)fs_ro_avg_6,
+round(a.fs_ro_bef_9/b.d_camp)fs_ro_avg_9,round(a.fs_ro_bef_12/b.d_camp)fs_ro_avg_12 from model.final_model_10 a inner join model.dist_camp b on a.cust_group=b.cust_group;
+
+--2,04,924
+create table model.final_model_11 as
+select a.cust_group,sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then tot_ro_amt else 0 end) ps_ro_bef_3, 
+sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then tot_ro_amt else 0 end) ps_ro_bef_6,
+sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then tot_ro_amt else 0 end) ps_ro_bef_9,
+sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then tot_ro_amt else 0 end) ps_ro_bef_12 from model.final_model_2 a where a.repm_work_type='PS' group by 1;
+
+create table model.final_model_11_v2 as 
+select a.cust_group,
+round(a.ps_ro_bef_3/b.d_camp)ps_ro_avg_3, round(a.ps_ro_bef_6/b.d_camp)ps_ro_avg_6,
+round(a.ps_ro_bef_9/b.d_camp)ps_ro_avg_9,round(a.ps_ro_bef_12/b.d_camp)ps_ro_avg_12 from model.final_model_11 a inner join model.dist_camp b on a.cust_group=b.cust_group;
+
+--2,55,024
+create table model.final_model_12 as
+select a.cust_group,sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then tot_ro_amt else 0 end) rr_ro_bef_3, 
+sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then tot_ro_amt else 0 end) rr_ro_bef_6,
+sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then tot_ro_amt else 0 end) rr_ro_bef_9,
+sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then tot_ro_amt else 0 end) rr_ro_bef_12 from model.final_model_2 a where a.repm_work_type='RR' group by 1;
+
+create table model.final_model_12_v2 as 
+select a.cust_group,
+round(a.rr_ro_bef_3/b.d_camp)rr_ro_avg_3, round(a.rr_ro_bef_6/b.d_camp)rr_ro_avg_6,
+round(a.rr_ro_bef_9/b.d_camp)rr_ro_avg_9,round(a.rr_ro_bef_12/b.d_camp)rr_ro_avg_12 from model.final_model_12 a inner join model.dist_camp b on a.cust_group=b.cust_group;
+
+--2,32,648
+create table model.final_model_13 as
+select a.cust_group,sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then tot_ro_amt else 0 end) ot_ro_bef_3, 
+sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then tot_ro_amt else 0 end) ot_ro_bef_6,
+sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then tot_ro_amt else 0 end) ot_ro_bef_9,
+sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then tot_ro_amt else 0 end) ot_ro_bef_12 from model.final_model_2 a where a.repm_work_type not in ('RR', 'PS', 'FS') group by 1;
+
+create table model.final_model_13_v2 as 
+select a.cust_group,
+round(a.ot_ro_bef_3/b.d_camp)ot_ro_avg_3, round(a.ot_ro_bef_6/b.d_camp)ot_ro_avg_6,
+round(a.ot_ro_bef_9/b.d_camp)ot_ro_avg_9,round(a.ot_ro_bef_12/b.d_camp)ot_ro_avg_12 from model.final_model_13 a inner join model.dist_camp b on a.cust_group=b.cust_group;
+
+--imported features_49_v2
+select count(*) from model.features_49_v2 as fv;
+create table model.features_50_v2 as 
+select a.*,b.avg_3,b.avg_6,b.avg_9,b.avg_12,
+c.fs_avg_3,c.fs_avg_6,c.fs_avg_9,c.fs_avg_12,
+d.ps_avg_3,d.ps_avg_6,d.ps_avg_9,d.ps_avg_12,
+e.rr_avg_3,e.rr_avg_6,e.rr_avg_9,e.rr_avg_12,
+f.ot_avg_3,f.ot_avg_6,f.ot_avg_9,f.ot_avg_12,
+g.ro_avg_3,g.ro_avg_6,g.ro_avg_9,g.ro_avg_12,
+h.fs_ro_avg_3,h.fs_ro_avg_6,h.fs_ro_avg_9,h.fs_ro_avg_12,
+i.ps_ro_avg_3,i.ps_ro_avg_6,i.ps_ro_avg_9,i.ps_ro_avg_12,
+j.rr_ro_avg_3,j.rr_ro_avg_6,j.rr_ro_avg_9,j.rr_ro_avg_12,
+k.ot_ro_avg_3,k.ot_ro_avg_6,k.ot_ro_avg_9,k.ot_ro_avg_12 from model.features_49_v2 a 
+left outer join model.final_model_3_v2 b on a.cust_group=b.cust_group
+left outer join model.final_model_4_v2 c on a.cust_group=c.cust_group
+left outer join model.final_model_5_v2 d on a.cust_group=d.cust_group
+left outer join model.final_model_6_v2 e on a.cust_group=e.cust_group
+left outer join model.final_model_7_v2 f on a.cust_group=f.cust_group
+left outer join model.final_model_8_v2 g on a.cust_group=g.cust_group
+left outer join model.final_model_10_v2 h on a.cust_group=h.cust_group
+left outer join model.final_model_11_v2 i on a.cust_group=i.cust_group
+left outer join model.final_model_12_v2 j on a.cust_group=j.cust_group
+left outer join model.final_model_13_v2 k on a.cust_group=k.cust_group;
+
+create table model.final_model_14 as
+select a.cust_group,sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then a.repm_milg else 0 end) mlg_sum_3, 
+sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then a.repm_milg else 0 end) mlg_sum_6,
+sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then a.repm_milg else 0 end) mlg_sum_9,
+sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then a.repm_milg else 0 end) mlg_sum_12 from model.final_model_2_v2 a group by 1;
+
+create table model.final_model_14_v2 as 
+select a.cust_group,
+round(a.mlg_sum_3/b.d_camp)mlg_avg_3, round(a.mlg_sum_6/b.d_camp)mlg_avg_6,
+round(a.mlg_sum_9/b.d_camp)mlg_avg_9,round(a.mlg_sum_12/b.d_camp)mlg_avg_12 from model.final_model_14 a inner join model.dist_camp b on a.cust_group=b.cust_group;
+
+create table model.cust_group as
+select distinct cust_group from model.features_50_v2 as fv;
+
+create table model.features_v3 as 
+select a.cust_group,b.mlg_avg_3,b.mlg_avg_6,b.mlg_avg_9,b.mlg_avg_12 from model.cust_group a left outer join model.final_model_14_v2 b on a.cust_group=b.cust_group;
+
+-------------------------------------------------------------------------------------------------------
+
 
 
 
