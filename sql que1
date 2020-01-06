@@ -1,0 +1,1554 @@
+------------------------------------Creating Dimensionwise table -----------------------------------
+-- Create Contact Analysis Master Table
+-- Tables Used S_Contact, S_Per_Comm_addr, S_addr_per, lookups from Anurag for City to State, Region, Zone mapping
+-----------------------------------------------------------------------------------------------------------
+-- 2 milllion
+select count(*), count(distinct a.contact_id) 
+from gcrm.contact_analysis_master as a 
+where PR_PER_ADDR_ID not in ( select distinct row_id from gcrm.s_addr_per);
+
+
+create table gcrm.contact_analysis_master as 
+select distinct a.row_id as contact_id , CON_CD, PER_TITLE , PR_PER_ADDR_ID, SEX_MF
+from gcrm.s_contact as a;
+
+
+-- 27,274,227 
+CREATE TABLE gcrm.contact_analysis_master_1 AS
+SELECT A.*, B.CITY
+FROM gcrm.contact_analysis_master A 
+LEFT OUTER JOIN gcrm.s_addr_per B ON A.PR_PER_ADDR_ID = b.row_id ;                                     
+
+
+create table city_mapping_final
+(City_Code	varchar(20),City varchar(20),State varchar(20),Region varchar(20),zone varchar(20)
+);
+
+create table Dealer_mapping_final
+(Dealer_Code	varchar(20),State_New varchar(20),Region varchar(20),zone varchar(20)
+);
+
+create table gcrm.contact_analysis_master_2 as
+select a.*, b.city as con_city_name, b.state as con_state, b.region as con_region , b.zone as con_zone
+from gcrm.contact_analysis_master_1 as a 
+ left outer join  gcrm.city_mapping_final b on a.city = b.city_code;
+
+select * from contact_analysis_master_2;
+
+
+
+----------------------------------------------------------------------------------------------------------------------------
+
+------------------------------------Creating Dimensionwise table -----------------------------------
+-- Create Contact Master Table for EDA data creation
+-- Tables Used S_Contact, S_Per_Comm_addr 
+-----------------------------------------------------------------------------------------------------------
+
+
+-- 22,957,844
+
+create table gcrm.contact_master as 
+select distinct per_id as contact_id
+from gcrm.s_per_comm_addr;
+
+create table gcrm.contact_master_0 as 
+select distinct row_id as contact_id
+from gcrm.s_contact;
+
+-- Checks 4,418,603
+select count(*) 
+from gcrm.s_contact as a 
+where row_id not in ( select per_id from gcrm.contact_master_0);
+
+insert into gcrm.contact_master select * from gcrm.contact_master_0;
+
+-- 27,376,447
+create table gcrm.contact_master_1 as
+select distinct * from gcrm.contact_master;
+
+
+--22,449,017
+
+create table gcrm.contact_master_2a 
+as select distinct per_id as contact_id , addr as Phone_num 
+from gcrm.s_per_comm_addr as a 
+where a.comm_medium_cd = 'Phone';
+
+-- 27,274,227
+create table gcrm.contact_master_2b 
+as select distinct row_id as contact_id , cell_ph_num as Phone_num 
+from gcrm.s_contact as a;
+
+-- 49,723,24
+insert into gcrm.contact_master_2a select * from gcrm.contact_master_2b;
+
+SELECT COUNT(*) FROM gcrm.contact_master_2a ;
+
+         
+-- 30,477,571
+create table gcrm.contact_master_2 as
+select distinct * from gcrm.contact_master_2a;
+
+
+--29,135,167
+create table gcrm.contact_master_2f as 
+select * from gcrm.contact_master_2
+where Phone_num  is not null;
+
+
+--15830002
+create table gcrm.contact_master_3a 
+as select distinct per_id, addr as Email_id
+from gcrm.s_per_comm_addr as a	where a.comm_medium_cd = 'Email';
+
+---- 27,274,227
+create table gcrm.contact_master_3b 
+as select distinct row_id as contact_id , email_addr as Email_id 
+from gcrm.s_contact as a;
+
+insert into gcrm.contact_master_3a select * from gcrm.contact_master_3b;
+
+-- 29,326,828
+create table gcrm.contact_master_3 as
+select distinct * from gcrm.contact_master_3a;
+
+--22,957,844
+create table gcrm.contact_master_4a
+as select distinct per_id, a.name as last_name
+from gcrm.s_per_comm_addr as a;
+
+create table gcrm.contact_master_4b 
+as select distinct row_id as contact_id , last_name
+from gcrm.s_contact as a;
+
+insert into gcrm.contact_master_4a select * from gcrm.contact_master_4b;
+
+-- 50232071
+create table gcrm.contact_master_4 as
+select distinct * from gcrm.contact_master_4a;
+
+-- 28,352,579
+create table gcrm.contact_master_5 as 
+select distinct a.*, b.Phone_num , c.Email_id, d.last_name
+from gcrm.contact_master_1 as a
+left outer join gcrm.contact_master_2 as b on  a.contact_id = b.contact_id 
+left outer join gcrm.contact_master_3 as c on  a.contact_id = b.contact_id 
+left outer join gcrm.contact_master_4 as d on  a.contact_id  = c.contact_id ;
+
+-------------------------------------------------------------------------------------------------------------------------------
+
+/*******************************************************************************
+ * Customer Segmentation - Variable Creation
+ 
+***************************************************************************/
+
+
+drop table temp100;
+
+create table temp100 as
+select  cust_group , labels, ro_dealer, count(*) as ct , sum(total_ro_amount) as ro_amount
+from public.final_model_1
+where ro_dealer is not null 
+group by 1,2, 3;
+
+create table temp101 as 
+select a.* from  temp100 a  inner join ( select cust_group, labels, max(ct) as ct from temp100 group by 1,2) b 
+on a.cust_group = b.cust_group and a.labels = b.labels and a.ct = b.ct ;
+
+create table temp102 as 
+select a.* from  temp100 a  inner join ( select cust_group, labels, max(ro_amount) as ro_amount from temp100 group by 1,2) b 
+on a.cust_group = b.cust_group and a.labels = b.labels and a.ro_amount = b.ro_amount ;
+
+
+vacuum public.final_model_1;
+vacuum analysis.ser_rcrepm_tb_4yr;
+
+drop table final_model_2;
+select count(*) from final_model_2;
+--2,95,69,196
+create table Final_model_2
+as select distinct a.new_camp_id,a.vin,a.cust_group,a.labels,a.prog_start_dt_new, (date(a.prog_start_dt_new) - interval '90' day) as bef_3,
+(date(a.prog_start_dt_new) - interval '180' day) as bef_6, (date(a.prog_start_dt_new) - interval '270' day) as bef_9,
+(date(a.prog_start_dt_new) - interval '365' day) as bef_12, b.repm_ro_dtime,b.repm_work_type,b.repm_ro_no,b.repm_dlr_no,(b.repm_bill_total_labr_amt+b.repm_bill_total_othr_amt+b.repm_bill_total_part_amt)tot_ro_amt
+from public.final_model_1 a left outer join analysis.ser_rcrepm_tb_4yr b on a.vin=b.repm_vin where b.repm_work_type <> 'AR' ;
+
+
+select * from public.final_model_2 where cust_group='100078';
+select repm_ro_no , repm_dlr_no , count(*) from public.final_model_2
+group by 1,2 
+having count(*) >1 
+order by count(*) ;
+
+--3,63,788
+create table final_model_3 as
+select a.cust_group,sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then 1 else 0 end) sum_bef_3, 
+sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then 1 else 0 end) sum_bef_6,
+sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then 1 else 0 end) sum_bef_9,
+sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then 1 else 0 end) sum_bef_12 from public.final_model_2 a group by 1;
+
+create table final_model_3_v2 as 
+select a.cust_group, vin 
+
+/*
+create table final_model_3_v2 as
+select a.cust_group,(sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then 1 else 0 end)/count(distinct new_camp_id)) c_3, 
+(sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then 1 else 0 end)/count(distinct new_camp_id)) c_6,
+(sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then 1 else 0 end)/count(distinct new_camp_id)) c_9,
+(sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then 1 else 0 end)/count(distinct new_camp_id)) c_12 from public.final_model_2 a group by 1;
+*/
+create table final_model_3_v3 as
+select a.cust_group,round(sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then 1 else 0 end)) sum_bef_3, 
+round(sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then 1 else 0 end)) sum_bef_6,
+round(sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then 1 else 0 end)) sum_bef_9,
+round(sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then 1 else 0 end)) sum_bef_12 from public.final_model_2 a group by 1;
+
+create table final_model_3_v4 as
+select a.cust_group,count(a.vin) vin_a,count(distinct a.vin)d_vin_a,count(distinct new_camp_id)d_camp from public.final_model_2 a group by 1;
+
+create table final_model_3_v5 as 
+select a.cust_group,round(a.sum_bef_3/b.vin_a)v_avg_3, round(a.sum_bef_6/b.vin_a)v_avg_6,
+round(a.sum_bef_9/b.vin_a)v_avg_9,round(a.sum_bef_12/b.vin_a)v_avg_12,
+round(a.sum_bef_3/b.d_vin_a)dv_avg_3, round(a.sum_bef_6/b.d_vin_a)dv_avg_6,
+round(a.sum_bef_9/b.d_vin_a)dv_avg_9,round(a.sum_bef_12/b.d_vin_a)dv_avg_12,
+round(a.sum_bef_3/b.d_camp)dc_avg_3, round(a.sum_bef_6/b.d_camp)dc_avg_6,
+round(a.sum_bef_9/b.d_camp)dc_avg_9,round(a.sum_bef_12/b.d_camp)dc_avg_12 from public.final_model_3_v3 a inner join public.final_model_3_v4 b on a.cust_group=b.cust_group;
+
+select v_avg_3,count(*) from final_model_3_v5 group by 1;
+select v_avg_6,count(*) from final_model_3_v5 group by 1;
+select v_avg_9,count(*) from final_model_3_v5 group by 1;
+select v_avg_12,count(*) from final_model_3_v5 group by 1;
+select dv_avg_3,count(*) from final_model_3_v5 group by 1;
+select dv_avg_6,count(*) from final_model_3_v5 group by 1;
+select dv_avg_9,count(*) from final_model_3_v5 group by 1;
+select dv_avg_12,count(*) from final_model_3_v5 group by 1;
+select dc_avg_3,count(*) from final_model_3_v5 group by 1;
+select dc_avg_6,count(*) from final_model_3_v5 group by 1;
+select dc_avg_9,count(*) from final_model_3_v5 group by 1;
+select dc_avg_12,count(*) from final_model_3_v5 group by 1;
+
+create table final_model_3_v6 as
+select a.cust_group,round(avg(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then 1 else 0 end)) sum_bef_3, 
+round(avg(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then 1 else 0 end)) sum_bef_6,
+round(avg(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then 1 else 0 end)) sum_bef_9,
+round(avg(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then 1 else 0 end)) sum_bef_12 from public.final_model_2 a group by 1;
+
+select sum_bef_3,count(*) from final_model_3_v6 group by 1;
+select sum_bef_6,count(*) from final_model_3_v6 group by 1;
+select sum_bef_9,count(*) from final_model_3_v6 group by 1;
+select sum_bef_12,count(*) from final_model_3_v6 group by 1;
+
+
+--3,41,700
+create table final_model_4 as
+select a.cust_group,sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then 1 else 0 end) fs_bef_3, 
+sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then 1 else 0 end) fs_bef_6,
+sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then 1 else 0 end) fs_bef_9,
+sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then 1 else 0 end) fs_bef_12 from public.final_model_2 a where a.repm_work_type='FS' group by 1 ;
+
+--2,04,924
+create table final_model_5 as
+select a.cust_group,sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then 1 else 0 end) ps_bef_3, 
+sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then 1 else 0 end) ps_bef_6,
+sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then 1 else 0 end) ps_bef_9,
+sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then 1 else 0 end) ps_bef_12 from public.final_model_2 a where a.repm_work_type='PS' group by 1 ;
+
+--2,55,024
+create table final_model_6 as
+select a.cust_group,sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then 1 else 0 end) rr_bef_3, 
+sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then 1 else 0 end) rr_bef_6,
+sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then 1 else 0 end) rr_bef_9,
+sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then 1 else 0 end) rr_bef_12 from public.final_model_2 a where a.repm_work_type='RR' group by 1 ;
+
+--2,32,648
+create table final_model_7 as
+select a.cust_group,sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then 1 else 0 end) ot_bef_3, 
+sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then 1 else 0 end) ot_bef_6,
+sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then 1 else 0 end) ot_bef_9,
+sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then 1 else 0 end) ot_bef_12 from public.final_model_2 a where a.repm_work_type not in ('RR', 'PS', 'FS') group by 1 ;
+
+create table final_model_8 as
+select a.cust_group,sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then tot_ro_amt else 0 end) sum_ro_bef_3, 
+sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then tot_ro_amt else 0 end) sum_ro_bef_6,
+sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then tot_ro_amt else 0 end) sum_ro_bef_9,
+sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then tot_ro_amt else 0 end) sum_ro_bef_12 from public.final_model_2 a group by 1;
+
+--2,11,84,644
+create table final_model_9 as
+select b.repm_vin,b.repm_ro_dtime,b.repm_work_type,b.repm_ro_no,b.repm_dlr_no,(b.repm_bill_total_labr_amt+b.repm_bill_total_othr_amt+b.repm_bill_total_part_amt)tot_ro_amt from analysis.ser_rcrepm_tb_4yr b where repm_work_type <> 'AR';
+
+--3,14,700
+create table final_model_10 as
+select a.cust_group,sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then tot_ro_amt else 0 end) fs_ro_bef_3, 
+sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then tot_ro_amt else 0 end) fs_ro_bef_6,
+sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then tot_ro_amt else 0 end) fs_ro_bef_9,
+sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then tot_ro_amt else 0 end) fs_ro_bef_12 from public.final_model_2 a where a.repm_work_type='FS' group by 1;
+
+--2,04,924
+create table final_model_11 as
+select a.cust_group,sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then tot_ro_amt else 0 end) ps_ro_bef_3, 
+sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then tot_ro_amt else 0 end) ps_ro_bef_6,
+sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then tot_ro_amt else 0 end) ps_ro_bef_9,
+sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then tot_ro_amt else 0 end) ps_ro_bef_12 from public.final_model_2 a where a.repm_work_type='PS' group by 1;
+
+--2,55,024
+create table final_model_12 as
+select a.cust_group,sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then tot_ro_amt else 0 end) rr_ro_bef_3, 
+sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then tot_ro_amt else 0 end) rr_ro_bef_6,
+sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then tot_ro_amt else 0 end) rr_ro_bef_9,
+sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then tot_ro_amt else 0 end) rr_ro_bef_12 from public.final_model_2 a where a.repm_work_type='RR' group by 1;
+
+--2,32,648
+create table final_model_13 as
+select a.cust_group,sum(case when a.repm_ro_dtime between a.bef_3 and a.prog_start_dt_new then tot_ro_amt else 0 end) ot_ro_bef_3, 
+sum(case when a.repm_ro_dtime between a.bef_6 and a.prog_start_dt_new then tot_ro_amt else 0 end) ot_ro_bef_6,
+sum(case when a.repm_ro_dtime between a.bef_9 and a.prog_start_dt_new then tot_ro_amt else 0 end) ot_ro_bef_9,
+sum(case when a.repm_ro_dtime between a.bef_12 and a.prog_start_dt_new then tot_ro_amt else 0 end) ot_ro_bef_12 from public.final_model_2 a where a.repm_work_type not in ('RR', 'PS', 'FS') group by 1;
+
+create table public.dist_camp as
+select a.cust_group,count(distinct new_camp_id)d_camp from public.final_model_2 a group by 1;
+
+create table public.final_model_3_v2 as 
+select a.cust_group,
+round(a.sum_bef_3/b.d_camp)avg_3, round(a.sum_bef_6/b.d_camp)avg_6,
+round(a.sum_bef_9/b.d_camp)avg_9,round(a.sum_bef_12/b.d_camp)avg_12 from public.final_model_3 a inner join public.dist_camp b on a.cust_group=b.cust_group;
+
+create table public.final_model_4_v2 as 
+select a.cust_group,
+round(a.fs_bef_3/b.d_camp)fs_avg_3, round(a.fs_bef_6/b.d_camp)fs_avg_6,
+round(a.fs_bef_9/b.d_camp)fs_avg_9,round(a.fs_bef_12/b.d_camp)fs_avg_12 from public.final_model_4 a inner join public.dist_camp b on a.cust_group=b.cust_group;
+
+create table public.final_model_5_v2 as 
+select a.cust_group,
+round(a.ps_bef_3/b.d_camp)ps_avg_3, round(a.ps_bef_6/b.d_camp)ps_avg_6,
+round(a.ps_bef_9/b.d_camp)ps_avg_9,round(a.ps_bef_12/b.d_camp)ps_avg_12 from public.final_model_5 a inner join public.dist_camp b on a.cust_group=b.cust_group;
+
+create table public.final_model_6_v2 as 
+select a.cust_group,
+round(a.rr_bef_3/b.d_camp)rr_avg_3, round(a.rr_bef_6/b.d_camp)rr_avg_6,
+round(a.rr_bef_9/b.d_camp)rr_avg_9,round(a.rr_bef_12/b.d_camp)rr_avg_12 from public.final_model_6 a inner join public.dist_camp b on a.cust_group=b.cust_group;
+
+create table public.final_model_7_v2 as 
+select a.cust_group,
+round(a.ot_bef_3/b.d_camp)ot_avg_3, round(a.ot_bef_6/b.d_camp)ot_avg_6,
+round(a.ot_bef_9/b.d_camp)ot_avg_9,round(a.ot_bef_12/b.d_camp)ot_avg_12 from public.final_model_7 a inner join public.dist_camp b on a.cust_group=b.cust_group;
+
+create table public.final_model_8_v2 as 
+select a.cust_group,
+round(a.sum_ro_bef_3/b.d_camp)ro_avg_3, round(a.sum_ro_bef_6/b.d_camp)ro_avg_6,
+round(a.sum_ro_bef_9/b.d_camp)ro_avg_9,round(a.sum_ro_bef_12/b.d_camp)ro_avg_12 from public.final_model_8 a inner join public.dist_camp b on a.cust_group=b.cust_group;
+
+create table public.final_model_10_v2 as 
+select a.cust_group,
+round(a.fs_ro_bef_3/b.d_camp)fs_ro_avg_3, round(a.fs_ro_bef_6/b.d_camp)fs_ro_avg_6,
+round(a.fs_ro_bef_9/b.d_camp)fs_ro_avg_9,round(a.fs_ro_bef_12/b.d_camp)fs_ro_avg_12 from public.final_model_10 a inner join public.dist_camp b on a.cust_group=b.cust_group;
+
+create table public.final_model_11_v2 as 
+select a.cust_group,
+round(a.ps_ro_bef_3/b.d_camp)ps_ro_avg_3, round(a.ps_ro_bef_6/b.d_camp)ps_ro_avg_6,
+round(a.ps_ro_bef_9/b.d_camp)ps_ro_avg_9,round(a.ps_ro_bef_12/b.d_camp)ps_ro_avg_12 from public.final_model_11 a inner join public.dist_camp b on a.cust_group=b.cust_group;
+
+create table public.final_model_12_v2 as 
+select a.cust_group,
+round(a.rr_ro_bef_3/b.d_camp)rr_ro_avg_3, round(a.rr_ro_bef_6/b.d_camp)rr_ro_avg_6,
+round(a.rr_ro_bef_9/b.d_camp)rr_ro_avg_9,round(a.rr_ro_bef_12/b.d_camp)rr_ro_avg_12 from public.final_model_12 a inner join public.dist_camp b on a.cust_group=b.cust_group;
+
+create table public.final_model_13_v2 as 
+select a.cust_group,
+round(a.ot_ro_bef_3/b.d_camp)ot_ro_avg_3, round(a.ot_ro_bef_6/b.d_camp)ot_ro_avg_6,
+round(a.ot_ro_bef_9/b.d_camp)ot_ro_avg_9,round(a.ot_ro_bef_12/b.d_camp)ot_ro_avg_12 from public.final_model_13 a inner join public.dist_camp b on a.cust_group=b.cust_group;
+
+
+create table public.features_50_v2 as 
+select a.*,b.avg_3,b.avg_6,b.avg_9,b.avg_12,
+c.fs_avg_3,c.fs_avg_6,c.fs_avg_9,c.fs_avg_12,
+d.ps_avg_3,d.ps_avg_6,d.ps_avg_9,d.ps_avg_12,
+e.rr_avg_3,e.rr_avg_6,e.rr_avg_9,e.rr_avg_12,
+f.ot_avg_3,f.ot_avg_6,f.ot_avg_9,f.ot_avg_12,
+g.ro_avg_3,g.ro_avg_6,g.ro_avg_9,g.ro_avg_12,
+h.fs_ro_avg_3,h.fs_ro_avg_6,h.fs_ro_avg_9,h.fs_ro_avg_12,
+i.ps_ro_avg_3,i.ps_ro_avg_6,i.ps_ro_avg_9,i.ps_ro_avg_12,
+j.rr_ro_avg_3,j.rr_ro_avg_6,j.rr_ro_avg_9,j.rr_ro_avg_12,
+k.ot_ro_avg_3,k.ot_ro_avg_6,k.ot_ro_avg_9,k.ot_ro_avg_12 from public.features_49_v2 a 
+left outer join model.final_model_3_v2 b on a.cust_group=b.cust_group
+left outer join model.final_model_4_v2 c on a.cust_group=c.cust_group
+left outer join model.final_model_5_v2 d on a.cust_group=d.cust_group
+left outer join model.final_model_6_v2 e on a.cust_group=e.cust_group
+left outer join model.final_model_7_v2 f on a.cust_group=f.cust_group
+left outer join model.final_model_8_v2 g on a.cust_group=g.cust_group
+left outer join model.final_model_10_v2 h on a.cust_group=h.cust_group
+left outer join model.final_model_11_v2 i on a.cust_group=i.cust_group
+left outer join model.final_model_12_v2 j on a.cust_group=j.cust_group
+left outer join model.final_model_13_v2 k on a.cust_group=k.cust_group;
+
+create table public.features_
+
+		select  date ('2017-06-04 00:00:00')- interval '90' day;
+			select current_date - interval '90' day;
+		select sum(2+4);
+    
+    ------------------------------------------------------------------------------------------------------------------------------
+    
+    ----------------------------DDLs & load scripts -------------------------------------------------
+
+vacuum analyse tablename;
+
+
+-----------------From Himavanth ----------------------------------
+-- RO table
+
+CREATE TABLE "Analysis".ser_rcrepm_tb (
+	repm_cmpn_no varchar(1) NOT NULL,
+	repm_corp_no varchar(5) NOT NULL,
+	repm_dlr_no varchar(10) NOT NULL,
+	repm_ro_no varchar(10) NOT NULL,
+	repm_vin varchar(17) NOT NULL,
+	repm_cust_no varchar(11) NULL,
+	repm_ro_stat varchar(2) NOT NULL,
+	repm_estmt_no varchar(10) NULL,
+	repm_bkng_no varchar(11) NULL,
+	repm_work_type varchar(2) NULL,
+	repm_drvr_cust_name varchar(200) NULL,
+	repm_milg numeric(8) NOT NULL,
+	repm_milg_vrfct_stat varchar(2) NULL,
+	repm_estmt_amt numeric(15,2) NULL,
+	repm_estmt_go_up_rsn varchar(200) NULL,
+	repm_estmt_prmsn_yn varchar(1) NULL,
+	repm_work_fnsh_estmt_dtime timestamp NULL,
+	repm_work_fnsh_sys_dtime timestamp NULL,
+	repm_work_strt_actl_dtime timestamp NULL,
+	repm_work_fnsh_actl_dtime timestamp NULL,
+	repm_ro_dtime timestamp NULL,
+	repm_delay_rsn_code varchar(7) NULL,
+	repm_svc_advsr_emp_no varchar(10) NULL,
+	repm_tchn_emp_no varchar(10) NULL,
+	repm_bill_total_part_amt numeric(15,2) NULL,
+	repm_bill_total_labr_amt numeric(15,2) NULL,
+	repm_bill_total_othr_amt numeric(15,2) NULL,
+	repm_total_labr_amt numeric(15,2) NULL,
+	repm_total_part_amt numeric(15,2) NULL,
+	repm_total_othr_amt numeric(15,2) NULL,
+	repm_tag_no_name varchar(60) NULL,
+	repm_no_job_yn varchar(1) NULL,
+	repm_pdi_ro_yn varchar(1) NULL,
+	repm_vst_type varchar(2) NULL,
+	repm_vst_type_seq_no numeric(5) NULL,
+	repm_spc_msg_dsctn varchar(50) NULL,
+	repm_rmkrs varchar(100) NULL,
+	repm_dlr_labr_rate numeric(7,2) NULL,
+	repm_cust_dmnd_dfct_cnt numeric(15) NULL,
+	repm_cncl_emp_no varchar(10) NULL,
+	repm_cncl_dtime timestamp NULL,
+	repm_cncl_rsn varchar(200) NULL,
+	repm_clse_emp_no varchar(10) NULL,
+	repm_clse_dtime timestamp NULL,
+	repm_crte_emp_no varchar(10) NULL,
+	repm_crte_dtime timestamp NULL,
+	repm_updt_emp_no varchar(10) NULL,
+	repm_updt_dtime timestamp NULL,
+	repm_ropn_rsn varchar(100) NULL,
+	repm_ropn_emp_no varchar(10) NULL,
+	repm_ropn_dtime timestamp NULL,
+	repm_ropn_cnt numeric(15) NULL,
+	repm_prvs_milg numeric(8) NULL,
+	repm_final_stat varchar(1) NULL,
+	repm_sr_num varchar(64) NULL,
+	repm_final_date varchar(8) NULL,
+	repm_reopen_cnt numeric(15) NULL,
+	repm_pdi_cust_no varchar(11) NULL,
+	repm_byng_no varchar(10) NULL,
+	repm_used_flag varchar(1) NULL,
+	repm_byng_dlr_code varchar(5) NULL,
+	repm_qk_svc varchar(10) NULL,
+	repm_ins_com varchar(5) NULL,
+	repm_mob_svc varchar(10) NULL,
+	repm_pdi_remarks varchar(550) NULL,
+	repm_pick_drop varchar(20) NULL,
+	repm_dry_wash varchar(10) NULL,
+	repm_ers varchar(1) NULL,
+	repm_none varchar(1) NULL,
+	repm_additional_confrm varchar(1) NULL,
+	repm_non_gen_acc varchar(1) NULL,
+	repm_high_watt_bulb varchar(1) NULL,
+	repm_high_watt_amplifier_wofer varchar(1) NULL,
+	repm_non_gen_cng_lpg varchar(1) NULL,
+	repm_local_fuel_rail_nut varchar(1) NULL,
+	repm_loose_wiring_routing varchar(1) NULL,
+	repm_high_watt_horn varchar(1) NULL,
+	repm_non_gen_fog_lamps varchar(1) NULL,
+	repm_no_details varchar(1) NULL,
+	repm_non_gen_remark varchar(200) NULL,
+	repm_wa_flag varchar(1) NULL,
+	repm_ro_stat_new varchar(5) NULL,
+	repm_be_upt_flg varchar(1) NULL,
+	repm_srat_a varchar(5) NULL,
+	repm_srat_b varchar(5) NULL,
+	repm_srat_c varchar(5) NULL,
+	repm_srat_d varchar(5) NULL,
+	repm_srat_e varchar(5) NULL,
+	repm_srat_f varchar(5) NULL,
+	repm_work_category varchar(5) NULL,
+	repm_complaint_count varchar(5) NULL,
+	repm_door_step varchar(1) NULL,
+	repm_proc_stat varchar(2) NULL,
+	repm_proc_date timestamp NULL,
+	repm_delay_rsn_rmkrs varchar(1000) NULL,
+	repm_delay_rsn_date timestamp NULL,
+	repm_surv_name varchar(50) NULL,
+	repm_rpir_type varchar(2) NULL,
+	repm_rpir_panl_cnt numeric(7,2) NULL,
+	repm_rplc_panl_cnt numeric(7,2) NULL,
+	repm_cust_wait varchar(2) NULL,
+	repm_fi_start_dtime timestamp NULL,
+	repm_fi_end_dtime timestamp NULL,
+	repm_qc_inspt_no varchar(10) NULL,
+	repm_wash_start_dtime timestamp NULL,
+	repm_wash_end_dtime timestamp NULL,
+	repm_wash_advsr_no varchar(10) NULL,
+	repm_wash_remark varchar(256) NULL,
+	repm_dlr_code varchar(5) NULL,
+	repm_exit_milg numeric(8) NULL,
+	repm_file_doc_id varchar(30) NULL,
+	repm_atof_rslt_no varchar(11) NULL,
+	repm_fi_stat varchar(2) NULL,
+	repm_wash_stat varchar(2) NULL,
+	CONSTRAINT ser_rcrepm_tb_tmp_fulldata_pkey PRIMARY KEY (repm_cmpn_no, repm_corp_no, repm_dlr_no, repm_ro_no)
+);
+
+-- Permissions
+
+ALTER TABLE "Analysis".ser_rcrepm_tb OWNER TO postgres;
+GRANT ALL ON TABLE "Analysis".ser_rcrepm_tb TO postgres;
+
+-- RO 2.5 years data
+
+CREATE TABLE "Analysis".rcrepm_tb_dedup (
+	repm_cmpn_no varchar(1) NULL,
+	repm_corp_no varchar(5) NULL,
+	repm_dlr_no varchar(10) NULL,
+	repm_ro_no varchar(10) NULL,
+	repm_vin varchar(17) NULL,
+	repm_cust_no varchar(11) NULL,
+	repm_ro_stat varchar(2) NULL,
+	repm_bkng_no varchar(11) NULL,
+	repm_work_type varchar(2) NULL,
+	repm_milg numeric(8) NULL,
+	repm_estmt_amt numeric(15,2) NULL,
+	repm_estmt_prmsn_yn varchar(1) NULL,
+	repm_work_fnsh_estmt_dtime timestamp NULL,
+	repm_work_fnsh_sys_dtime timestamp NULL,
+	repm_work_fnsh_actl_dtime timestamp NULL,
+	repm_ro_dtime timestamp NULL,
+	repm_svc_advsr_emp_no varchar(10) NULL,
+	repm_tchn_emp_no varchar(10) NULL,
+	repm_bill_total_part_amt numeric(15,2) NULL,
+	repm_bill_total_labr_amt numeric(15,2) NULL,
+	repm_bill_total_othr_amt numeric(15,2) NULL,
+	repm_clse_dtime timestamp NULL,
+	repm_crte_dtime timestamp NULL,
+	repm_updt_dtime timestamp NULL,
+	repm_ropn_cnt numeric(15) NULL,
+	repm_wa_flag varchar(1) NULL
+);
+
+
+--- Send Email log file 
+
+CREATE TABLE "Analysis".bz_send_log_filter_data_maxdt2 (
+     msg_id varchar(20) NULL,
+     msg_mem_id int8 NULL,
+     msg_sub_id int8 NULL,
+     mem_seq int8 NULL,
+     msg_seq int8 NULL,
+     user_em varchar(100) NULL,
+     user_nm varchar(100) NULL,
+     user_id varchar(50) NULL,
+     user_num varchar(13) NULL,
+     send_dt timestamp NULL,
+     msg_cd varchar(3) NULL,
+     msg_upper_class varchar(1) NULL,
+     msg_middle_class varchar(1) NULL,
+     em_domain varchar(50) NULL,
+     errmsg varchar(2000) NULL,
+     sbl_row_id varchar(15) NULL,
+     sbl_inf_dt timestamp NULL,
+     sbl_inf_flg bpchar(1) NULL,
+     open_dt timestamp NULL,
+     click_dt timestamp NULL
+);
+
+
+
+----------------------- From Aravindh-----------------------------------------------
+-- Asset Master
+
+
+-- Drop table
+
+-- DROP TABLE gcrm.asset_master;
+
+CREATE TABLE "Analysis".asset_master (
+              asset_id varchar(15) NULL,
+              registered_dt date NULL,
+              vin varchar(100) NULL,
+              model_yr numeric(10) NULL,
+              fuel_cd varchar(30) NULL,
+              ext_color_cd varchar(30) NULL,
+              model_cd varchar(30) NULL,
+              warranty_start_dt timestamp NULL,
+              warranty_end_dt timestamp NULL,
+              dlr_id varchar(15) NULL
+);
+
+--- channel effectiveness
+
+CREATE TABLE "Analysis".appended_sms_email_both (
+              new_camp_id varchar(20) NULL,
+              new_campaign_disp_name varchar(100) NULL,
+              prog_start_dt_new timestamp NULL,
+              prog_end_dt_new timestamp NULL,
+              contact_id varchar(15) NULL,
+              asset_id varchar(15) NULL,
+              vin varchar(100) NULL,
+              channel_clubbed varchar(20) NULL
+);
+
+select count(*) from analysis.ser_rcrepm_tb;
+
+--- RO 
+copy "Analysis".ser_rcrepm_tb from 'D:/Data_CSVsplits/2_NDMS/ro 4 years data/ro_4years_data.csv' delimiter '|' quote '"' csv header;
+copy "Analysis".ser_rcrepm_tb from 'D:/Data_CSVsplits/2_NDMS/ro 4 years data/ro_4years_data_2.csv' delimiter '|' quote '"' csv header;
+copy "Analysis".ser_rcrepm_tb from 'D:/Data_CSVsplits/2_NDMS/ro 4 years data/ro_4years_data_3.csv' delimiter '|' quote '"' csv header;
+copy "Analysis".ser_rcrepm_tb from 'D:/Data_CSVsplits/2_NDMS/ro 4 years data/ro_4years_data_4.csv' delimiter '|' quote '"' csv header;
+copy "Analysis".ser_rcrepm_tb from 'D:/Data_CSVsplits/2_NDMS/ro 4 years data/ro_4years_data_5.csv' delimiter '|' quote '"' csv header;
+copy "Analysis".ser_rcrepm_tb from 'D:/Data_CSVsplits/2_NDMS/ro 4 years data/ro_4years_data_6.csv' delimiter '|' quote '"' csv header;
+copy "Analysis".ser_rcrepm_tb from 'D:/Data_CSVsplits/2_NDMS/ro 4 years data/ro_4years_data_7.csv' delimiter '|' quote '"' csv header;
+copy "Analysis".ser_rcrepm_tb from 'D:/Data_CSVsplits/2_NDMS/ro 4 years data/ro_4years_data_8.csv' delimiter '|' quote '"' csv header;
+copy "Analysis".ser_rcrepm_tb from 'D:/Data_CSVsplits/2_NDMS/ro 4 years data/ro_4years_data_9.csv' delimiter '|' quote '"' csv header;
+copy "Analysis".ser_rcrepm_tb from 'D:/Data_CSVsplits/2_NDMS/ro 4 years data/ro_4years_data_10.csv' delimiter '|' quote '"' csv header;
+copy "Analysis".ser_rcrepm_tb from 'D:/Data_CSVsplits/2_NDMS/ro 4 years data/ro_4years_data_11.csv' delimiter '|' quote '"' csv header;
+
+-- NDMS - Send Email Log Files
+
+copy "Analysis".bz_send_log_filter_data_maxdt2 from 'D:/Data_CSVsplits/bz_send_log/bz_send_log_filter_data_maxdt2_datafinal.csv' delimiter '|' quote '"' csv header;
+copy "Analysis".bz_send_log_filter_data_maxdt2 from 'D:/Data_CSVsplits/bz_send_log/bz_send_log_filter_data_maxdt2_datafinal_2.csv' delimiter '|' quote '"' csv header;
+copy "Analysis".bz_send_log_filter_data_maxdt2 from 'D:/Data_CSVsplits/bz_send_log/bz_send_log_filter_data_maxdt2_datafinal_3.csv' delimiter '|' quote '"' csv header;
+copy "Analysis".bz_send_log_filter_data_maxdt2 from 'D:/Data_CSVsplits/bz_send_log/bz_send_log_filter_data_maxdt2_datafinal_4.csv' delimiter '|' quote '"' csv header;
+copy "Analysis".bz_send_log_filter_data_maxdt2 from 'D:/Data_CSVsplits/bz_send_log/bz_send_log_filter_data_maxdt2_datafinal_5.csv' delimiter '|' quote '"' csv header;
+copy "Analysis".bz_send_log_filter_data_maxdt2 from 'D:/Data_CSVsplits/bz_send_log/bz_send_log_filter_data_maxdt2_datafinal_6.csv' delimiter '|' quote '"' csv header;
+copy "Analysis".bz_send_log_filter_data_maxdt2 from 'D:/Data_CSVsplits/bz_send_log/bz_send_log_filter_data_maxdt2_datafinal_7.csv' delimiter '|' quote '"' csv header;
+copy "Analysis".bz_send_log_filter_data_maxdt2 from 'D:/Data_CSVsplits/bz_send_log/bz_send_log_filter_data_maxdt2_datafinal_8.csv' delimiter '|' quote '"' csv header;
+copy "Analysis".bz_send_log_filter_data_maxdt2 from 'D:/Data_CSVsplits/bz_send_log/bz_send_log_filter_data_maxdt2_datafinal_9.csv' delimiter '|' quote '"' csv header;
+copy "Analysis".bz_send_log_filter_data_maxdt2 from 'D:/Data_CSVsplits/bz_send_log/bz_send_log_filter_data_maxdt2_datafinal_10.csv' delimiter '|' quote '"' csv header;
+copy "Analysis".bz_send_log_filter_data_maxdt2 from 'D:/Data_CSVsplits/bz_send_log/bz_send_log_filter_data_maxdt2_datafinal_11.csv' delimiter '|' quote '"' csv header;
+copy "Analysis".bz_send_log_filter_data_maxdt2 from 'D:/Data_CSVsplits/bz_send_log/bz_send_log_filter_data_maxdt2_datafinal_12.csv' delimiter '|' quote '"' csv header;
+
+
+- Channel Effectiveness
+
+copy "Analysis".appended_sms_email_both from 'D:\final_channel_effectiveness\appended_sms_email_both_1.csv' delimiter ',' quote '"' csv header;
+copy "Analysis".appended_sms_email_both from 'D:\final_channel_effectiveness\appended_sms_email_both_2.csv' delimiter ',' quote '"' csv header;
+copy "Analysis".appended_sms_email_both from 'D:\final_channel_effectiveness\appended_sms_email_both_3.csv' delimiter ',' quote '"' csv header;
+copy "Analysis".appended_sms_email_both from 'D:\final_channel_effectiveness\appended_sms_email_both_4.csv' delimiter ',' quote '"' csv header;
+copy "Analysis".appended_sms_email_both from 'D:\final_channel_effectiveness\appended_sms_email_both_5.csv' delimiter ',' quote '"' csv header;
+copy "Analysis".appended_sms_email_both from 'D:\final_channel_effectiveness\appended_sms_email_both_6.csv' delimiter ',' quote '"' csv header;
+copy "Analysis".appended_sms_email_both from 'D:\final_channel_effectiveness\appended_sms_email_both_7.csv' delimiter ',' quote '"' csv header;
+copy "Analysis".appended_sms_email_both from 'D:\final_channel_effectiveness\appended_sms_email_both_8.csv' delimiter ',' quote '"' csv header;
+copy "Analysis".appended_sms_email_both from 'D:\final_channel_effectiveness\appended_sms_email_both_9.csv' delimiter ',' quote '"' csv header;
+copy "Analysis".appended_sms_email_both from 'D:\final_channel_effectiveness\appended_sms_email_both_10.csv' delimiter ',' quote '"' csv header;
+
+--To upload asset master table
+copy "Analysis".asset_master from 'D:\asset_master\asset_master.csv' delimiter ',' quote '"' csv header;
+
+
+--To upload Ro 2.5 years data 
+-- copy "Analysis".asset_master from 'D:\Data_CSVsplits\2_NDMS\rcrepm_tb_dedup_1.csv' delimiter '|' quote '"' csv header;
+
+-------------------------------------------------------------------
+
+select distinct a.row_id, a.ou_num  from  s_org_ext as a 
+order by row_id;
+
+select distinct divn_type_cd , count(*)  from  s_org_ext group by 1 ;
+
+select distinct ou_num , divn_type_cd from s_org_ext
+where divn_type_cd  is not null ;
+
+
+select a.ou_num, b.divn_type_cd from s_org_ext a, s_org_ext b where a.row_id = b.par_divn_id  
+            and b.divn_type_cd is not null 
+ 
+
+drop table temp2;
+commit;
+
+ -----------------------------------------------------------------------------------------------------------------------------------
+ 
+ ----------8 capaigns from campaignlist v0.5 provided by Gowdhaman campaign type CAMP& EVENTS
+---count 11,876,525
+create table EMAIL_camp_events
+as
+select distinct
+	o.campaign_name,
+	o.camp_id,
+	o.channel,
+	date(o.prog_start_dt) as prog_start_dt,
+	date(o.prog_end_dt) as prog_end_dt,	
+	sc.asset_id,
+	o.camp_name_for_disp,
+	sc.row_id as contact_id
+from
+	a_camp_con_14_prsp_con_contact_end as sc
+left outer join our_src as o on
+	o.camp_id = sc.src_id
+	where o.campaign_type='Camps & Events' and o.channel='EMAIL';
+
+-- Checks 
+select count(distinct camp_id), count(distinct contact_id), count(*) from EMAIL_camp_events;
+
+
+
+---fetching vin numbers for EMAIL CAMPAIGNS
+--count  11,876,525
+create table EMAIL_camp_events_1
+as 
+select distinct
+	a.campaign_name,
+	a.camp_id,
+	b.asset_num as vin,
+	a.channel,
+	a.asset_id,
+	a.camp_name_for_disp,
+	a.contact_id,	
+	a.prog_start_dt,
+	a.prog_end_dt	
+	from EMAIL_camp_events as a 
+left outer join s_asset as b 
+	on b.row_id = a.asset_id;
+	
+--Applying exclutionlist
+---count 11,434,173
+create table email_camp_events_2
+as
+select * from gcrm.email_camp_events_1
+where contact_id not in ( select * from ndms.g3_ocmv_exclutionlist);
+
+vacuum full email_camp_events_2;
+
+-----count 2,62,917
+select count(*) from email_camp_events_2 where vin is null;
+
+---removing  records which is having vin nulls 
+delete from email_camp_events_2 where vin is null;
+commit;
+--count 11,171,256
+select count (*) from email_camp_events_2;
+
+
+drop table email_camp_events_3;
+commit;
+
+--- Getting the RO details for the campaign duration only for mechanical ROs
+---count 11,289,213
+select count(*) from gcrm.email_camp_events_3;
+
+create table gcrm.email_camp_events_3
+as
+select
+	mi.campaign_name,
+	mi.camp_id,
+	mi.vin,
+	mi.channel,
+	mi.asset_id,
+	mi.camp_name_for_disp,
+	mi.contact_id,	
+	mi.prog_start_dt,
+	mi.prog_end_dt,
+	up1.repm_ro_dtime,
+	(up1.total_sales_amount) as total_sales_amount,
+	 up1.repm_work_type,
+	 up1.repm_ro_no,
+	 up1.repm_dlr_no
+	 from
+	gcrm.email_camp_events_2  as mi
+left outer join ndms.rcrepm_tb_dedup_2_wt1 as up1 on
+	up1.repm_vin = mi.vin
+	and date(up1.repm_ro_dtime) between mi.prog_start_dt and mi.prog_end_dt
+	and up1.repm_work_type in ('RR','FS','PS')	
+;
+
+-- Checks 
+select repm_work_type , count(*) from ndms.rcrepm_tb_dedup_2_wt1 group by 1;
+
+--
+drop table gcrm.email_camp_events_4;
+
+-- Roll up for a campid, contact, VIN the RO details 
+-- 11,171,256
+create table  gcrm.email_camp_events_4 as select
+	distinct 
+	mi.campaign_name,
+	mi.camp_id,
+	mi.vin,
+	mi.channel,
+	mi.asset_id,
+	mi.camp_name_for_disp,
+	mi.contact_id,	
+	mi.prog_start_dt,
+	mi.prog_end_dt,
+	sum (total_sales_amount) as total_sales_amount,
+	count(repm_ro_no) as ro_count,
+	(case
+		when count(mi.repm_ro_no) > 0 then 1
+		when count(mi.repm_ro_no) <= 0 then 0
+	end ) as bin_ro
+from gcrm.email_camp_events_3 as mi
+group by 
+ mi.campaign_name,
+	mi.camp_id,
+	mi.vin,
+	mi.channel,
+	mi.asset_id,
+	mi.camp_name_for_disp,
+	mi.contact_id,	
+	mi.prog_start_dt,
+	mi.prog_end_dt;
+ select * from  gcrm.email_camp_events_3; 
+
+--- Checks
+
+  select ro_count, count(*) from gcrm.email_camp_events_4 group by 1;
+    select camp_id, camp_name_for_disp, count(contact_id), sum(bin_ro) from email_camp_events_4
+    group by 1,2 ;   
+   
+ --count always shuld be zero
+select count(*) from  (
+select camp_id, contact_id,vin, count(*) from gcrm.email_camp_events_4
+group by 1,2,3
+having count(*) >1 ) as b;
+---count 4,67,683
+select count(*) from (select camp_id, contact_id, count(*) from gcrm.email_camp_events_4 
+group by 1,2
+having count(*) >1 ) as b
+order by count desc;
+
+
+select * from gcrm.email_camp_events_4;
+vacuum full gcrm.email_camp_events_4;
+
+select camp_id, camp_name_for_disp, count(contact_id), sum(bin_ro) from email_camp_events_4
+    group by 1,2 ; 
+
+
+select distinct sms_campaign_name from sms_contacts_4 as sc;
+
+select contact_id,vin, count(*) from EMAIL_camp_events_4 group by 1,2
+having count(contact_id)>1;
+---------------------------------------------------------------------------------------------------------------------------------
+
+------------------------------ Fact table creation - with RO count & RO value ------------------------------------
+
+/**************************************************************************************************************
+-----------------------------------------------------------------------------------------------------------------
+----------------------------------------- Campaign Effectiveness ------------------------------------------------
+------------------------------------------------------------------------------------------------------------------
+****************************************************************************************************************/
+ 
+/*
+ * 
+-- campaign_effect_all_fact dataset is from Gowdhaman ( fact_contact is original file name) 
+ -- Used this we missed 5 records, but now we miss 6 records while importing as csv. So using allthree_3 to create fact
+--42,129,863
+create table analysis.campaign_effect_all_fact2 as 
+select a.*, c.campaign_type
+from analysis.campaign_effect_all_fact  a	
+left outer join analysis.our_s_src c on a.new_camp_id =c.new_camp_id; 
+
+
+-- 32,569,416
+create table analysis.fact_camp_events as
+select a.*
+from analysis.campaign_effect_all_fact2 a
+where campaign_type = 'Camps & Events';
+*/
+
+-- drop table analysis.all_three4;
+-- commit;
+-- To get campaign type in the all_three tables from gowdhaman
+
+--- 42,129,864
+create table analysis.all_three4 as 
+select a.*, c.campaign_type, c.prog_start_dt_new , c.prog_end_dt_new
+from analysis.all_three3  a	
+left outer join analysis.our_s_src c on a.new_camp_id =c.new_camp_id; 
+
+--  1,010,964
+/*
+create table analysis.all_three4_EW as 
+select a.* from analysis.all_three4 a
+where campaign_type = 'EW Promotion' ; 
+*/
+
+--42,319,546
+/*
+create table analysis.all_three4_campsnevents_fact1 as
+select
+       mi.new_campaign_disp_name,
+       mi.new_camp_id,
+       mi.vin,
+       mi.channel_clubbed,
+       mi.campaign_type,
+       mi.asset_id,
+       mi.contact_id,
+       mi.prog_start_dt_new,
+       mi.prog_end_dt_new,
+       up1.repm_ro_dtime,
+       (up1.repm_bill_total_labr_amt + up1.repm_bill_total_othr_amt + up1.repm_bill_total_part_amt) as total_sales_amount,
+       up1.repm_work_type,
+       up1.repm_ro_no,
+       up1.repm_dlr_no,
+       up1.repm_milg,
+       (case when up1.repm_work_type ='RR' then 1 else 0 end ) as ind_rr,
+       (case when up1.repm_work_type ='FS' then 1 else 0 end ) as ind_fs,
+       (case when up1.repm_work_type ='PS' then 1 else 0 end ) as ind_ps
+from analysis.all_three4 as mi
+left outer join analysis.ser_rcrepm_tb_4yr as up1 on up1.repm_vin = mi.vin 
+       and date(up1.repm_ro_dtime) between mi.prog_start_dt_new and mi.prog_end_dt_new
+       and up1.repm_work_type in ('RR', 'FS', 'PS')
+      where mi.campaign_type = 'Camps & Events';
+
+ 
+--42,129,864 
+ Create table analysis.all_three4_campsnevents_fact2 as
+select
+       mi.new_campaign_disp_name,
+       mi.new_camp_id,
+       mi.vin,
+       mi.channel_clubbed,
+       mi.asset_id,
+       mi.contact_id,
+       mi.prog_start_dt_new,
+       mi.prog_end_dt_new,
+       sum(mi.total_sales_amount) as total_ro_amount,
+       count(repm_ro_no) as ro_count,
+       (case
+             when count(mi.repm_ro_no) > 0 then 1
+             else 0
+       end ) as bin_ro,
+       max(ind_rr) as ind_rr,
+       max(ind_ps) as ind_ps,
+       max(ind_fs) as ind_fs,
+       sum(ind_rr) as rr_count,
+       sum(ind_ps) as ps_count,
+       sum(ind_fs) as fs_count
+from analysis.all_three4_campsnevents_fact1 as mi
+group by
+       mi.new_campaign_disp_name,
+       mi.new_camp_id,
+       mi.vin,
+       mi.channel_clubbed,
+       mi.asset_id,
+       mi.contact_id,
+       mi.prog_start_dt_new,
+       mi.prog_end_dt_new;
+  
+  
+--42,129,863
+select count(*), count(distinct new_camp_id) 
+from analysis.campaign_effect_all_fact a;
+*/
+ 	
+--Creating RO Dimension
+/*
+create table analysis.max_rodtime_details as
+select 	new_camp_id,
+		new_campaign_disp_name,	
+       	contact_id,
+       	channel_clubbed,
+       	vin,
+       max (repm_ro_dtime) as max_rodt
+       from analysis.all_three4_campsnevents_fact1
+       where vin is not null and repm_ro_dtime is not null and repm_ro_no is not null 
+       group by new_camp_id,
+				new_campaign_disp_name,	
+		       contact_id,
+		       channel_clubbed,
+		       vin;
+ 
+-- 2,417,824
+create table analysis.ro_dimension_camp_effect_campnevents
+as
+select distinct    mi.new_camp_id,
+	               mi.new_campaign_disp_name,
+	               mi.contact_id,
+	               mi.vin,
+	               mi.channel_clubbed,
+	               mi.repm_dlr_no as Ro_dealer, 
+	               mi.repm_ro_no,
+	               mi.repm_milg,
+	               up1.max_rodt as max_ro_dtime
+   
+	  from analysis.all_three4_campsnevents_fact1 as  mi 
+inner join analysis.max_rodtime_details as up1
+on  mi.vin = up1.vin and  up1.max_rodt= mi.repm_ro_dtime;
+
+-- Updated Rows	2411473
+create table analysis.ro_dimension_camp_effect_campnevents_2 as 
+select *  from  
+(select new_camp_id,
+new_campaign_disp_name,
+contact_id,
+vin,
+channel_clubbed,
+ro_dealer,
+repm_milg,
+row_number() over (partition By new_camp_id,contact_id,VIN order by repm_milg  ) as RNK
+from analysis.ro_dimension_camp_effect_campnevents) as A 
+where A.RNK =1;
+*/
+-- 2,417,824
+
+create table analysis.ro_dimension_camp_effect_campnevents_3 as 
+select a.*,
+b.State_New as RO_state, b.region as RO_region, b.zone as RO_zone
+from analysis.ro_dimension_camp_effect_campnevents_2 a
+ left outer join analysis.dealer_master_Anurag  b  on a.RO_dealer = b.dealer_code;
+
+/*
+select new_camp_id, contact_id, vin, count(*)
+from analysis.ro_dimension_camp_effect_campnevents_3
+group by 1,2,3
+having count(*) >1;
+ */
+-- Contact dimension
+
+/*********************************************************************
+ * Contact Master table
+ *******************************************************************/
+/*
+create table analysis.contact_analysis_master as 
+select distinct a.row_id as contact_id , CON_CD, PER_TITLE , PR_PER_ADDR_ID, SEX_MF
+from gcrm.s_contact as a;
+
+-- 27,274,227 
+
+CREATE TABLE analysis.contact_analysis_master_1 AS
+SELECT A.*, B.CITY
+FROM analysis.contact_analysis_master A 
+LEFT OUTER JOIN gcrm.s_addr_per B ON A.PR_PER_ADDR_ID = b.row_id ;      
+
+create table analysis.contact_analysis_master_2 as
+select a.*, b.city as con_city_name, b.state as con_state, b.region as con_region , b.zone as con_zone
+from analysis.contact_analysis_master_1 as a 
+left outer join  analysis.city_mapping_final b on a.city = b.city_code;
+ */   
+-------------------------------------------------------------------------------------------------
+-------------------------------------- Creating EDA (Roll up) analysis table ----------------------
+-------------------------------------------------------------------------------------------------
+
+create table analysis.Campaign_EDA as
+select
+	a.*,
+	extract(year from (date(a.prog_start_dt_new))) as year_prog_start,
+	extract (month from (date(a.prog_start_dt_new))) as month_prog_start,
+	extract(year from (date(a.prog_end_dt_new))) as year_prog_end,
+	extract (month from (date(a.prog_end_dt_new))) as month_prog_end,
+	b.fuel_cd,
+	b.ext_color_cd,
+	b.model_cd,
+	b.dlr_id as sales_dlr_code,
+	extract( year from 	(b.registered_dt)) as vehicle_model_yr,
+	round((date(a.prog_start_dt_new)-date(b.registered_dt))/ 365) as Age_of_vehicle,
+	c.campaign_type,
+	c.ageofvehicle_targeted,
+	c.models_targeted,
+	c.camp_sub_type,
+	c.frequency,
+	c.region,
+	c.sms_sent,
+	c.budget,
+	d.Ro_dealer,
+	d.repm_milg,
+	(case 
+		when d.repm_milg <= 1000 then '1.LE 1K'
+		when d.repm_milg <= 5000 then '2.2K-5K'
+		when d.repm_milg <= 10000 then '3.6K-10K'
+		when d.repm_milg <= 15000 then '4.11K-15K'
+		when d.repm_milg <= 20000 then '5.16K-20K'
+		else '5.GT 20K'
+	end) as repm_milg_bin,
+	e.ws_type as RO_ws_type,
+	e.activation_date as RO_ws_activation_dt,
+	e.region as RO_ws_region,
+	e.zone as RO_ws_zone,
+	e.new_city as RO_ws_city,
+	round((date(a.prog_start_dt_new)-date(e.activation_date))/ 365) as RO_ws_Tenure,
+	f.ws_type as sales_dlr_type,
+	f.activation_date as sales_dlr_activation_dt,
+	f.region as sales_dlr_region,
+	f.zone as sales_dlr_zone,
+	f.new_city as sales_dlr_city,
+	round((date(a.prog_start_dt_new)-date(f.activation_date))/ 365) as sales_dlr_Tenure,
+	g.CON_CD, g.SEX_MF , g.con_city_name, g.con_state, g.con_region , g.con_zone
+from
+	analysis.all_three4_campsnevents_fact2 a
+left outer join analysis.asset_master b on 	a.vin = b.vin
+left outer join analysis.our_s_src c on 	a.new_camp_id = c.new_camp_id
+left outer join analysis.ro_dimension_camp_effect_campnevents d on a.new_camp_id = d.new_camp_id and a.contact_id = D.CONTACT_ID 
+	and a.vin = d.vin
+left outer join analysis.dealer_master_jatin e on e.ws_code = d.Ro_dealer
+left outer join analysis.dealer_master_jatin f on e.ws_code = b.dlr_id
+left outer join analysis.contact_analysis_master_2 g on a.contact_id = g.contact_id ;
+
+ 
+--  32,575,772
+create table analysis.Campaign_EDA2 as
+ select a.*,
+ 		(case when Age_of_vehicle <= 3 then '1.Gold(0-3Y)'
+	  when Age_of_vehicle <=5 then '2.Platinum(4Y-5Y)' 
+      when Age_of_vehicle<=7 then '3.Diamond(6Y-7Y)'
+      when Age_of_vehicle<=10 then'4.Shapphir(8Y-10Y)'
+      else '5.Loyal(GT 10Y)' end) Vehicle_Age_bin,
+       (case when RO_ws_Tenure <=1 then '1.0-1Y'
+	  when  RO_ws_Tenure <=4 then '2.2Y-4Y' 
+      when RO_ws_Tenure <=7 then'3.5Y-7Y'
+      when RO_ws_Tenure <=10 then '4.8Y-10Y'
+      else '5.GT 10Y' end)  as RO_ws_Tenure_bin,
+      
+          (case when sales_dlr_Tenure <=1 then '1.0-1Y'
+	  when  sales_dlr_Tenure <=4 then '2.2Y-4Y' 
+      when sales_dlr_Tenure <=7 then'3.5Y-7Y'
+      when sales_dlr_Tenure <=10 then '4.8Y-10Y'
+      when sales_dlr_Tenure >10 then '5.GT 10Y' end)  as sales_dlr_Tenure_bin
+     
+from analysis.Campaign_EDA a;
+
+create table analysis.Campaign_EDA3 as
+ select a.*,
+ 		
+     
+from analysis.Campaign_EDA2 a;
+
+
+
+--  15,768,235
+create table analysis.Campaign_EDA_pivot as 
+select 
+new_camp_id, new_campaign_disp_name ,channel_clubbed, year_prog_start, month_prog_start , year_prog_end, month_prog_end,
+campaign_type, ageofvehicle_targeted, models_targeted, camp_sub_type, frequency, region,
+fuel_cd, ext_color_cd, model_cd, Age_of_vehicle, Vehicle_Age_bin,repm_milg_bin, RO_ws_type, RO_ws_region, RO_ws_zone, RO_ws_Tenure_bin,
+sales_dlr_type, sales_dlr_region, sales_dlr_zone, sales_dlr_city, sales_dlr_Tenure_bin,
+CON_CD, SEX_MF, con_city_name, con_state, con_region ,con_zone,
+count(*) as contact_ct, sum(bin_ro) as respon_ct , count(distinct vin) as vin_ct ,
+sum( sms_sent) as sms_delivered_ct , sum(budget) as budget_spent_sms ,sum(total_ro_amount) as ro_amount   
+
+from analysis.Campaign_EDA2 group by
+
+new_camp_id, new_campaign_disp_name ,channel_clubbed, year_prog_start, month_prog_start , year_prog_end, month_prog_end,
+campaign_type, ageofvehicle_targeted, models_targeted, camp_sub_type, frequency, region,
+fuel_cd, ext_color_cd, model_cd, Age_of_vehicle, Vehicle_Age_bin,repm_milg_bin, RO_ws_type, RO_ws_region, RO_ws_zone,  RO_ws_city, RO_ws_Tenure_bin,
+sales_dlr_type, sales_dlr_region, sales_dlr_zone, sales_dlr_city, sales_dlr_Tenure_bin,
+CON_CD, SEX_MF, con_city_name, con_state, con_region ,con_zone
+;
+      
+-- removed milage
+create table analysis.Campaign_EDA_pivot3 as 
+select 
+new_camp_id, new_campaign_disp_name ,channel_clubbed, year_prog_start, month_prog_start , year_prog_end, month_prog_end,
+campaign_type, ageofvehicle_targeted, models_targeted, camp_sub_type, frequency, region,
+fuel_cd, ext_color_cd, model_cd, sales_dlr_code,  vehicle_model_yr , Age_of_vehicle, Vehicle_Age_bin,
+Ro_dealer,repm_milg_bin, RO_ws_type, RO_ws_region, RO_ws_zone, RO_ws_Tenure_bin,
+sales_dlr_type, sales_dlr_region, sales_dlr_zone, sales_dlr_Tenure_bin,
+CON_CD, SEX_MF, con_state, con_region ,con_zone,
+count(*) as contact_ct, sum(bin_ro) as respon_ct , count(distinct vin) as vin_ct ,
+sum( sms_sent) as sms_delivered_ct , sum(budget) as budget_spent_sms ,sum(total_ro_amount) as ro_amount   
+
+from analysis.Campaign_EDA2 group by
+
+new_camp_id, new_campaign_disp_name ,channel_clubbed, year_prog_start, month_prog_start , year_prog_end, month_prog_end,
+campaign_type, ageofvehicle_targeted, models_targeted, camp_sub_type, frequency, region,
+fuel_cd, ext_color_cd, model_cd, sales_dlr_code,  vehicle_model_yr , Age_of_vehicle, Vehicle_Age_bin,
+Ro_dealer,repm_milg_bin, RO_ws_type, RO_ws_region, RO_ws_zone, RO_ws_Tenure_bin,
+sales_dlr_type, sales_dlr_region, sales_dlr_zone, sales_dlr_Tenure_bin,
+CON_CD, SEX_MF, con_state, con_region ,con_zone
+;
+      
+      
+-----------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------
+----------------------------------------- Channel Effectiveness ------------------------------------------------
+------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------
+create table analysis.all_three_channel_fact1 as
+select
+       mi.new_campaign_disp_name,
+       mi.new_camp_id,
+       mi.vin,
+       mi.channel_clubbed,
+       mi.asset_id,
+       mi.contact_id,
+       mi.prog_start_dt_new,
+       mi.prog_end_dt_new,
+       up1.repm_ro_dtime,
+       (up1.repm_bill_total_labr_amt + up1.repm_bill_total_othr_amt + up1.repm_bill_total_part_amt) as total_sales_amount,
+       up1.repm_work_type,
+       up1.repm_ro_no,
+       up1.repm_dlr_no,
+       (case 
+             when up1.repm_work_type ='RR' then 1
+             else 0
+       end ) as ind_rr,
+       (case 
+             when up1.repm_work_type ='FS' then 1
+             else 0
+       end ) as ind_fs,
+       (case 
+             when up1.repm_work_type ='PS' then 1
+             else 0
+       end ) as ind_ps
+from
+       analysis.appended_sms_email_both as mi
+left outer join analysis.ser_rcrepm_tb_4yr as up1 on
+       up1.repm_vin = mi.vin
+       and date(up1.repm_ro_dtime) between mi.prog_start_dt_new and mi.prog_end_dt_new
+       and up1.repm_work_type in ('RR',
+       'FS',
+       'PS');
+
+--
+create table analysis.all_three_channel_fact2 as
+select
+        mi.new_campaign_disp_name,
+       mi.new_camp_id,
+       mi.vin,
+       mi.channel_clubbed,
+       mi.asset_id,
+       mi.contact_id,
+       mi.prog_start_dt_new,
+       mi.prog_end_dt_new,
+       sum(mi.total_sales_amount) as total_ro_amount,
+       count(repm_ro_no) as ro_count,
+       (case
+             when count(mi.repm_ro_no) > 0 then 1
+             else 0
+       end ) as bin_ro,
+       max(ind_rr) as ind_rr,
+       max(ind_ps) as ind_ps,
+       max(ind_fs) as ind_fs,
+       sum(ind_rr) as rr_count,
+       sum(ind_ps) as ps_count,
+       sum(ind_fs) as fs_count
+from
+       analysis.all_three_channel_fact1 as mi
+group by
+       mi.new_campaign_disp_name,
+       mi.new_camp_id,
+       mi.vin,
+       mi.channel_clubbed,
+       mi.asset_id,
+       mi.contact_id,
+       mi.prog_start_dt_new,
+       mi.prog_end_dt_new;
+
+     -- drop table analysis.appended_sms_email_both2;
+    -- commit;
+    
+    --38444899
+   create table analysis.appended_sms_email_both2 as
+   select a.* ,
+   ( case 
+   when channel_clubbed in('SMS only','Both') and a.contact_id = b.per_id then 1 
+   when channel_clubbed = 'Email only' then 1
+   else 0 end) as ind_Removal
+   from  analysis.appended_sms_email_both a
+   left outer join (select distinct per_id from gcrm.temp_ph2 ) as b on a.contact_id = b.per_id;
+  
+  
+  select new_camp_id, new_campaign_disp_name, count(*), count(distinct contact_id), count(distinct vin)
+  from analysis.appended_sms_email_both group by 1,2;
+  
+ ---------------- Creating EDA (Roll up) analysis table ----------------------
+ 
+ 
+ 
+  
+ ----------------------------------------------------------------------------------------------------------------------------------
+ 
+ 
+------------------------------To identify the recent contact id for a Phone number (one to one mapping)------------------
+
+create table gcrm.temp_ph as select 
+distinct a.per_id, a.addr  from gcrm.s_per_comm_addr a 
+where a.comm_medium_cd = 'Phone';
+
+create table gcrm.temp_ph2 as select 
+distinct a.per_id, a.addr, a.db_last_upd 
+from gcrm.s_per_comm_addr a  inner join
+(select addr, max(db_last_upd) as db_last_upd from gcrm.s_per_comm_addr where comm_medium_cd = 'Phone' group by 1 ) as b
+on a.addr = b.addr and a.db_last_upd = b.db_last_upd  ;
+
+
+-- 22449017, 20075685, 22449017, 14476645
+select count(*), count(distinct per_id), count( addr), count(distinct addr) from  gcrm.temp_ph ;
+
+--  14,616,763 | 13,497,530 | 14,616,763 | 14,476,645
+select count(*), count(distinct per_id), count( addr), count(distinct addr) from  gcrm.temp_ph2 ;
+
+-- 2.2 million
+select count(*) from (select addr, count(*) from gcrm.temp_ph2 group by 1 having count(*) > 1) as b;
+
+-- 4.2 million
+
+select count(*) from ( select phone_num, count(*) from gcrm.temp2
+group by 1
+having count(*) > 1) as b;
+
+create table gcrm.temp_ph as select 
+distinct a.per_id, a.addr  from gcrm.s_per_comm_addr a 
+where a.comm_medium_cd = 'Phone';
+
+-------------------------------------------------------------------------------------------------------------------------
+create table gcrm.temp as select 
+distinct a.per_id, a.addr, a.comm_medium_cd, a.db_last_upd 
+from gcrm.s_per_comm_addr a  inner join
+( select per_id, addr, max(db_last_upd) as db_last_upd from gcrm.s_per_comm_addr group by 1,2) as b
+on a.per_id = b.per_id and a.addr = b.addr and a.db_last_upd = b.db_last_upd  ;
+
+
+create table gcrm.temp2 as 
+select a.per_id, a.addr as phone_num, a.db_last_upd as db_last_upd_phone,
+b.addr as email, b.db_last_upd as db_last_upd_email 
+from gcrm.temp  a
+left outer join gcrm.temp b on a.per_id = b.per_id and b.comm_medium_cd = 'Email'
+where a.comm_medium_cd = 'Phone' ;
+
+
+-- 25,299,025	20,075,554	25,299,025	14,476,629	16,240,970	6,036,089
+select count(*), count(distinct per_id), count( phone_num), count(distinct phone_num), count(email)  , count(distinct email)
+from  gcrm.temp2 ;
+
+-- 2.2 million
+select count(*) from ( select per_id, count(distinct phone_num) from gcrm.temp2
+group by 1
+having count(*) > 1) as b;
+
+-- 4.2 million
+select count(*) from ( select phone_num, count(*) from gcrm.temp2
+group by 1
+having count(*) > 1) as b;
+
+----------------------------------------perid level last updated date-------------------------
+create table gcrm.temp_per as select 
+distinct a.per_id, a.addr, a.comm_medium_cd from gcrm.s_per_comm_addr a  inner join
+(select per_id, max(db_last_upd) as db_last_upd from gcrm.s_per_comm_addr group by 1) as b
+on a.per_id = b.per_id and a.db_last_upd = b.db_last_upd  ;
+
+create table gcrm.temp_per2 as 
+select distinct a.per_id, a.addr as phone_num, b.addr as email
+from gcrm.temp_per a
+left outer join gcrm.temp_per b on a.per_id = b.per_id and b.comm_medium_cd = 'Email'
+where a.comm_medium_cd = 'Phone' ;
+
+--10676972	10676665	10676972	8305746	10676972
+select count(*), count(distinct per_id), count( phone_num), count(distinct phone_num), count(*) from  gcrm.temp_per2 ;
+
+
+
+select count(*) from ( select per_id, count(distinct phone_num) from gcrm.temp_per2
+group by 1
+having count(*) > 1) as b;
+
+-- 
+select count(*) from ( select phone_num, count(*) from gcrm.temp_per2
+group by 1
+having count(*) > 1) as b;
+
+create table gcrm.temp_ph as select 
+distinct a.per_id, a.addr  from gcrm.s_per_comm_addr a 
+where a.comm_medium_cd = 'Phone';
+--------------------------------------------------------------------------------------------------------------------------------
+
+----------23 capaigns from campaignlist v0.5 provided by Gowdhaman campaign type CAMP& EVENTS and channel ='SMS'
+select * from sms_camp_events;
+select count(*) from sms_contacts_4;--65,387,315
+--create table for sms camp&Events 
+--count 32,503,319
+drop table sms_camp_events;
+commit;
+vacuum full sms_contacts_4;
+vacuum full our_src;
+create table sms_camp_events
+as
+select distinct
+	o.campaign_name,
+	o.camp_id,
+	o.channel,
+	date(o.prog_start_dt) as prog_start_dt,
+	date(o.prog_end_dt) as prog_end_dt,	
+	sc.asset_id,
+	o.camp_name_for_disp,
+	sc.per_id as contact_id
+from
+	sms_contacts_4 as sc
+left outer join our_src as o on
+	o.campaign_name = sc.sms_campaign_name
+	where o.campaign_type='Camps & Events' and o.channel='SMS';
+vacuum full sms_camp_events;
+---fetching vin numbers for sms
+--count 32,503,319
+drop table sms_camp_events_1;
+commit;
+create table sms_camp_events_1
+as 
+select distinct
+	a.campaign_name,
+	a.camp_id,
+	b.asset_num as vin,
+	a.channel,
+	a.asset_id,
+	a.camp_name_for_disp,
+	a.contact_id,	
+	a.prog_start_dt,
+	a.prog_end_dt	
+	from sms_camp_events as a 
+left outer join s_asset as b 
+	on b.row_id = a.asset_id;
+
+vacuum full sms_camp_events_1;
+--Applying exclutionlist
+---count 31,312,612
+drop table SMS_camp_events_2;
+commit;
+create table SMS_camp_events_2
+as
+select * from gcrm.SMS_camp_events_1
+where contact_id not in ( select * from ndms.g3_ocmv_exclutionlist);
+
+-----count 8,677,522
+select count(*) from sms_camp_events_2 where vin is null;
+
+---removing  records which is having vin nulls 
+delete from sms_camp_events_2 where vin is null;
+commit;
+--count 22,635,090
+select count (*) from sms_camp_events_2;
+select * from ndms.rcrepm_tb_dedup_2_wt1;
+
+
+drop table gcrm.sms_camp_events_3;
+commit;
+--- Getting the RO details for the campaign duration only for mechanical ROs
+---count  22,723,394
+create table gcrm.sms_camp_events_3
+as
+select
+	mi.campaign_name,
+	mi.camp_id,
+	mi.vin,
+	mi.channel,
+	mi.asset_id,
+	mi.camp_name_for_disp,
+	mi.contact_id,	
+	mi.prog_start_dt,
+	mi.prog_end_dt,
+	up1.repm_ro_dtime,
+	(up1.total_sales_amount) as total_sales_amount,
+	 up1.repm_work_type,
+	 up1.repm_ro_no,
+	 up1.repm_dlr_no
+	 from
+	gcrm.sms_camp_events_2  as mi
+left outer join ndms.rcrepm_tb_dedup_2_wt1 as up1 on
+	up1.repm_vin = mi.vin
+	and date(up1.repm_ro_dtime) between mi.prog_start_dt and mi.prog_end_dt
+	and up1.repm_work_type in ('RR','FS','PS')	
+;
+
+drop table gcrm.sms_camp_events_4;
+commit;
+
+-- Roll up for a campid, contact, VIN the RO details 
+-- 22,635,090
+create table  gcrm.sms_camp_events_4 as select
+	distinct 
+	mi.campaign_name,
+	mi.camp_id,
+	mi.vin,
+	mi.channel,
+	mi.asset_id,
+	mi.camp_name_for_disp,
+	mi.contact_id,	
+	mi.prog_start_dt,
+	mi.prog_end_dt,
+	sum (total_sales_amount) as total_sales_amount,
+	count(repm_ro_no) as ro_count,
+	(case
+		when count(mi.repm_ro_no) > 0 then 1
+		when count(mi.repm_ro_no) <= 0 then 0
+	end ) as bin_ro
+from gcrm.sms_camp_events_3 as mi
+group by 
+ mi.campaign_name,
+	mi.camp_id,
+	mi.vin,
+	mi.channel,
+	mi.asset_id,
+	mi.camp_name_for_disp,
+	mi.contact_id,	
+	mi.prog_start_dt,
+	mi.prog_end_dt;
+	
+     -- Checks
+	 
+	 select ro_count, count(*) from gcrm.sms_camp_events_4 group by 1;
+    select camp_id, camp_name_for_disp, count(contact_id), sum(bin_ro) from sms_camp_events_4
+    group by 1,2 ;
+ --count always shuld be zero
+select count(*) from  (
+select camp_id, contact_id,vin, count(*) from gcrm.sms_camp_events_4 
+group by 1,2,3
+having count(*) >1 ) as b;
+---count 9,68,644
+select count(*) from (select camp_id, contact_id, count(*) from gcrm.sms_camp_events_4 
+group by 1,2
+having count(*) >1 ) as b
+order by count desc;
+
+insert into camp_events_1
+select * from gcrm.email_camp_events_4;
+
+select distinct vin from camp_events_1;
+-----below table created for dashboard creation in qlick sense with merging data from both sms and email and taking source as contact_mster table 
+create table all_camp_events_2
+as
+select  distinct
+mi.campaign_name,
+	mi.camp_id,
+	mi.vin,
+	mi.channel,
+	mi.asset_id,
+	mi.camp_name_for_disp,
+	mi.contact_id,	
+	mi.prog_start_dt,
+	mi.prog_end_dt,
+	mi.total_sales_amount,
+	mi.ro_count,
+	 mi.bin_ro,
+	b.sex_mf ,
+    b.city ,
+    b.con_city_name ,
+    b.con_state ,
+    b.con_region ,
+    b.con_zone	 
+	 from all_camp_events as mi 
+	 inner join contact_analysis_master_2 as b 
+	 on b.contact_id = mi.contact_id;
+	 vacuum  full all_camp_events_2;
+	 select count( distinct contact_id) from all_camp_events_2;
+
+ 
+
+
+
+
+
+
